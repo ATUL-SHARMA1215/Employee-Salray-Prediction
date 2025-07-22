@@ -4,38 +4,35 @@ import joblib
 import os
 import requests
 
-# ---------------------------
-# Load model & preprocessing tools from Hugging Face
-# ---------------------------
 HF_REPO_URL = "https://huggingface.co/ATUL-SHARMA1215/employee-salary-model/resolve/main/"
+MODEL_DIR = "model"
+MODEL_FILES = ["best_model.pkl", "scaler.pkl", "label_encoders.pkl"]
 
 def download_file(filename):
-    if not os.path.exists(filename):
-        url = HF_REPO_URL + filename
-        r = requests.get(url)
-        if r.status_code == 200:
-            with open(filename, "wb") as f:
-                f.write(r.content)
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    filepath = os.path.join(MODEL_DIR, filename)
+    if not os.path.exists(filepath):
+        print(f"⬇️ Downloading {filename} from Hugging Face...")
+        response = requests.get(HF_REPO_URL + filename)
+        if response.status_code == 200:
+            with open(filepath, "wb") as f:
+                f.write(response.content)
+            print(f"✅ {filename} downloaded successfully!")
         else:
-            st.error(f"❌ Failed to download {filename} from Hugging Face.")
-            st.stop()
+            raise Exception(f"❌ Failed to download {filename}: {response.status_code}")
 
-# Download and load files
-for file in ["best_model.pkl", "scaler.pkl", "label_encoders.pkl"]:
+# Download model files if not present
+for file in MODEL_FILES:
     download_file(file)
 
-model = joblib.load("best_model.pkl")
-scaler = joblib.load("scaler.pkl")
-label_encoders = joblib.load("label_encoders.pkl")
+# Load model and encoders
+model = joblib.load("model/best_model.pkl")
+scaler = joblib.load("model/scaler.pkl")
+label_encoders = joblib.load("model/label_encoders.pkl")
 
-# ---------------------------
-# Streamlit Page Config
-# ---------------------------
 st.set_page_config(page_title="💼 Salary Predictor", layout="centered")
 
-# ---------------------------
 # Background and Styling
-# ---------------------------
 st.markdown("""
     <style>
     .stApp {
@@ -70,15 +67,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------
-# UI Header
-# ---------------------------
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
 st.markdown("<h1>💼 Salary Predictor</h1>", unsafe_allow_html=True)
 
-# ---------------------------
-# Form Input
-# ---------------------------
+# UI Form
 with st.form("predict_form"):
     age = st.slider("Age", 18, 90, 30)
     education = st.selectbox("Education", label_encoders["education"].classes_)
@@ -99,9 +91,7 @@ with st.form("predict_form"):
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------
 # Prediction Logic
-# ---------------------------
 if submit:
     input_data = {
         'age': age,
@@ -121,15 +111,16 @@ if submit:
     }
 
     df = pd.DataFrame([input_data])
-
     for col in df.select_dtypes(include='object').columns:
         df[col] = label_encoders[col].transform(df[col])
 
+    df = df[list(input_data.keys())]
     scaled = scaler.transform(df)
     prediction = model.predict(scaled)[0]
     income_label = label_encoders["income"].inverse_transform([prediction])[0]
     prob = model.predict_proba(scaled).max()
 
+    # Output Result
     st.markdown(f"""
         <div class="result">
             <h3>🎯 Prediction Result</h3>
